@@ -9,9 +9,11 @@
     ]
   },
   "rules": {
-    "quotemark": [true, "single"],
+    "quotemark": [true, "double"],
     "indent": [true, "spaces", 2],
     "interface-name": false,
+    "semicolon": true,
+    "trailing-comma": true,
     "ordered-imports": false,
     "object-literal-sort-keys": false,
     "no-consecutive-blank-lines": false

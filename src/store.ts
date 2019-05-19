@@ -1,6 +1,7 @@
 import Vue from "vue";
 import Vuex from "vuex";
 import { IStore, IClassNode } from "./types";
+import { ClassUtils } from "./utils/ClassUtils";
 
 Vue.use(Vuex);
 
@@ -31,6 +32,7 @@ export default new Vuex.Store<IStore>({
       classes.map((classNode) => {
         classNode.ReceivedName = classNode.Name;
       });
+      ClassUtils.makeRelations(classes);
       commit("addClasses", classes);
     }
   }

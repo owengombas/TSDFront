@@ -1,68 +1,72 @@
 <template>
   <div class="editor" v-if="selected">
+    <div class="notif" :class="{show: showNotif}">
+      {{notif}}
+    </div>
+
     <section>
-      <h1>Class</h1>
-      <input :disabled="editing" type="text" placeholder="ClassName" v-model="selected.Name" @input="checkClassName">
+      <h1>{{ selected.Name }}</h1>
     </section>
 
     <section>
-      <h1>Fields</h1>
+      <h2>Fields</h2>
       <div
       v-for="(item, index) in selected.Fields"
       :key="index"
-      class="field">
-        <div v-for="(item, index2) in relationField(item)" :key="index2">
-          <div v-if="item.Primary">
-            Primary key
+      class="fields">
+        <div v-for="(item2, index2) in relationField(item)" :key="index2">
+          <div class="comment" v-if="relationField(item2).length > 1">
+            Relation to {{ item2.TypeName }} ({{ relationType(item2) }})
           </div>
-          <div v-if="relationField(item).length > 1">
-            Relation to {{ item.TypeName }} ({{ relationType(item) }})
+          <div class="field">
+            <div class="field-settings">
+              <input
+              type="text"
+              placeholder="FieldName"
+              v-model="item2.Name"
+              @input="checkFieldName(item, index)"
+              :disabled="item2.Primary && editing">
+              <select
+              v-if="!item2.Primary"
+              @change="checkRelation(item2)"
+              v-model="item2.TypeName"
+              :disabled="item2.Primary || index2 > 0">
+                <option v-for="(item, index) in allTypes" :key="index">
+                  {{ item }}
+                </option>
+              </select>
+              <label v-if="!item2.Primary && false">
+                <input type="checkbox" v-model="item2.IsArray" :disabled="item2.Primary"/>
+                Array
+              </label>
+              <label v-if="!item2.Primary">
+                <input type="checkbox" v-model="item2.IsNullable" :disabled="item2.Primary"/>
+                Nullable
+              </label>
+            </div>
+            <button class="danger" @click="remove(item, index)" v-if="!item2.Primary && index2 < 1">
+              Remove
+            </button>
+            <div v-else/>
+            <label class="pk" v-if="item2.Primary">
+              Primary key
+            </label>
           </div>
-          <input
-          type="text"
-          placeholder="FieldName"
-          v-model="item.Name"
-          @input="checkFieldName"
-          :disabled="item.Primary && editing">
-          <select
-          @change="checkRelation(item)"
-          v-model="item.TypeName"
-          :disabled="item.Primary || index2 > 0">
-            <option v-for="(item, index) in allTypes" :key="index">
-              {{ item }}
-            </option>
-          </select>
-          <label>
-            <input type="checkbox" v-model="item.IsArray" :disabled="item.Primary"/>
-            Array
-          </label>
-          <label>
-            <input type="checkbox" v-model="item.IsNullable" :disabled="item.Primary"/>
-            Nullable
-          </label>
-          <label v-if="!editing && !item.Relation && index2 < 1">
-            <input
-            type="radio"
-            name="primary"
-            :value="index"
-            @change="primaryChange(index)"
-            :v-model="primaryIndex"
-            :checked="primaryIndex === index"/>
-            PK
-          </label>
         </div>
       </div>
     </section>
 
-    <section>
-      <button @click="addField">
+    <section class="controls">
+      <button class="secondary" @click="addField">
         New field
       </button>
-      <button @click="send" :disabled="errors.length > 0">
-        {{ editing ? "Edit" : "Create" }}
+      <button @click="send" :disabled="errors.length > 0 || loading">
+        {{ editing ? "Confirm changes" : "Create" }}
       </button>
-      <div v-for="(item, index) in errors" :key="index">
-        {{ item }}
+      <div class="errors">
+        <div class="error" v-for="(item, index) in errors" :key="index">
+          {{ item }}
+        </div>
       </div>
     </section>
   </div>
@@ -81,19 +85,30 @@ export default class Home extends Vue {
   private getClasses!: () => Promise<any>;
   private classes!: IClassNode[];
   private selected: IClassNode | null = null;
+  private notif: string | null = null;
+  private showNotif: boolean = false;
   private types: string[] = [
     "string",
     "number",
     "boolean"
   ];
   private editing: boolean = false;
-  private errors: string[] = [];
+  private loading: boolean = false;
 
   private get allTypes() {
     return [
-      ...this.types,
-      ...this.classes.map((aClass) => aClass.Name)
+      ...this.types
+      // ...this.classes.map((aClass) => aClass.Name)
     ];
+  }
+
+  private get errors() {
+    return this.selected!.Fields.flatMap((field, index) => {
+      if (field.Errors) {
+        return field.Errors.map((error) => `${field.Name ? field.Name : index}: ${error}`);
+      }
+      return [];
+    });
   }
 
   private get creatingClasses() {
@@ -108,6 +123,11 @@ export default class Home extends Vue {
 
   private get primaryIndex() {
     return this.selected!.Fields.findIndex((field) => field.Primary);
+  }
+
+  private remove(item: IFieldNode, index: number) {
+    this.selected!.Fields.splice(index, 1);
+    this.selected!.Fields.map((field) => this.checkFieldName(field));
   }
 
   private relationField(item: IFieldNode) {
@@ -160,7 +180,7 @@ export default class Home extends Vue {
         Decorators: [],
         Name: "NewClass",
         Path: "",
-        ReceivedName: "NewClass"
+        ReceivedName: "NewClass",
       };
       this.getClasses();
     }
@@ -171,51 +191,95 @@ export default class Home extends Vue {
     this.classNameAlreadyExists();
   }
 
-  private checkFieldName() {
-    const okay = !!this.selected!.Fields.find((field) => {
-      return !!this.selected!.Fields.find((field2) =>
-        field2.Name.toLowerCase() === field.Name.toLowerCase() && field !== field2
-      );
-    });
-    this.AddRemoveError("FieldName already exists", okay);
+  /**
+   * Check if field name is valid
+   */
+  private checkFieldName(item: IFieldNode) {
+    this.addRemoveError(
+      "Field format is unavailable",
+      item,
+      /^[a-z,A-Z]+[0-9,a-z,A-Z]*/gm.test(item.Name)
+    );
+
+    for (const field of this.selected!.Fields) {
+      const dup = field.Name.toLowerCase() === item.Name.toLowerCase() && field !== item;
+      this.addRemoveError("Duplicated field name", item, !dup);
+      if (dup) {
+        break;
+      }
+    }
+
+    // RELATION CHECK
+    // if (item.Relation) {
+    //   const classNode = this.classes.find((classRelation) => {
+    //     return classRelation.Name === item.TypeName;
+    //   });
+    //   if (classNode) {
+    //     const dupRelation = classNode.Fields.find((findRelationField) => {
+    //       return findRelationField.Name === item.Relation!.FieldNode.Name
+    //     });
+    //   }
+    // }
   }
 
+  /**
+   * Check if the class name already exists
+   * @deprecated
+   */
   private classNameAlreadyExists() {
     const okay = this.creatingClasses.filter((classNode) => {
       return classNode.Name.toLowerCase() === this.selected!.Name.toLowerCase();
     }).length > 1;
-    this.AddRemoveError("ClassName already exists", okay);
   }
 
+  /**
+   * Check if the class name has been changed
+   * @deprecated
+   */
   private isEditing() {
     this.editing = this.selected!.ReceivedName!.toLowerCase() === this.selected!.Name.toLowerCase();
   }
 
-  private AddRemoveError(msg: string, add: boolean) {
-    const errorIndex = this.errors.indexOf(msg);
-    if (errorIndex > -1) {
-      if (!add) {
-        this.errors.splice(errorIndex, 1);
-      }
-    } else if (add) {
-      this.errors.push(msg);
+  /**
+   * Add or remove errors related to a field
+   */
+  private addRemoveError(msg: string, field: IFieldNode, remove: boolean) {
+    if (!field.Errors) {
+      field.Errors = [];
     }
+    const index = field.Errors.indexOf(msg);
+    if (index < 0 && !remove) {
+      field.Errors.push(msg);
+    } else if (index > -1 && remove) {
+      field.Errors.splice(index, 1);
+    }
+    return remove;
   }
 
   private addField() {
     const primary = this.primaryIndex < 0 ? true : false;
-    this.selected!.Fields.push({
+    const field = {
       Accessors: [],
       TypeName: primary ? "number" : this.types[0],
       DefaultValue: undefined,
       IsArray: false,
       IsNullable: false,
       Decorators: [],
-      Name: "NewField",
-      Primary: primary
+      Name: primary ? "ID" : `NewField${this.selected!.Fields.length}`,
+      Primary: primary,
+      Errors: []
+    };
+    const length = this.selected!.Fields.push(field);
+    this.checkFieldName(field);
+    this.$nextTick(() => {
+      window.scrollTo(0, document.body.scrollHeight);
     });
   }
 
+  /**
+   * Change the primary key field
+   * @deprecated
+   */
   private primaryChange(index: number) {
     this.selected!.Fields[this.primaryIndex].Primary = false;
     const field = this.selected!.Fields[index];
@@ -225,6 +289,9 @@ export default class Home extends Vue {
     field.IsArray = false;
   }
 
+  /**
+   * @deprecated
+   */
   private checkRelation(item: IFieldNode) {
     if (!this.types.includes(item.TypeName)) {
       this.$set(item, "Relation", {
@@ -244,6 +311,7 @@ export default class Home extends Vue {
 
   private async send() {
     if (this.selected) {
+      this.loading = true;
       const datas: IClassNode = {
         ...this.selected,
         Fields: this.selected.Fields.map((field) => {
@@ -255,7 +323,8 @@ export default class Home extends Vue {
                 Relation: undefined,
                 StaticRelation: {
                   ClassNodeName: field.Relation.ClassNode.Name,
-                  FieldNode: field.Relation.FieldNode
+                  FieldNode: field.Relation.FieldNode,
+                  FieldNodeName: field.Relation.FieldNode.Name
                 }
               }
             );
@@ -271,19 +340,40 @@ export default class Home extends Vue {
         body: JSON.stringify(datas)
       };
       const res = await fetch(`http://localhost:4000/rest/cms`, fetchInfos);
-      this.selected = await res.json();
+      await this.getClasses();
+      const foundSelected = this.classes.find((selectedClass) =>
+        selectedClass.Name === this.selected!.Name
+      );
+      this.selected = foundSelected || null;
       this.selected!.ReceivedName = this.selected!.Name;
       this.editing = true;
+      this.loading = false;
+      this.notify("Confirmed");
     }
   }
 
   private redirectToHome() {
     this.$router.replace("/");
   }
+
+  private notify(text: string) {
+    this.notif = text;
+    this.showNotif = true;
+    setTimeout(() => {
+      this.showNotif = false;
+    }, 3000);
+  }
 }
 </script>
 
 <style lang="scss" scoped>
+.field-settings {
+  width: 60%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .editor {
   display: flex;
   justify-content: center;
@@ -292,13 +382,29 @@ export default class Home extends Vue {
   flex-direction: column;
 }
 
+.error {
+  font-size: 1.4em;
+}
+
+.errors {
+  text-align: center;
+  margin-bottom: 20px;
+  margin-top: 40px;
+}
+
+.fields {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
 .field {
-  margin-top: 10px;
-  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 section {
-  width: 50%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -306,7 +412,55 @@ section {
   min-width: 500px;
 }
 
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  button {
+    margin-top: 30px;
+  }
+}
+
 button {
   margin-top: 10px;
+}
+
+.comment {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.pk {
+  font-size: 1.2em;
+  font-weight: bold;
+  opacity: 0.8;
+  color: rgb(43, 93, 255);
+}
+
+label {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.notif {
+  font-size: 1.5em;
+  font-weight: bold;
+  position: fixed;
+  top: 10px;
+  background: rgb(43, 93, 255);
+  box-shadow: 0px 7px 30px 0px rgba(43, 93, 255, 0.349);
+  color: white;
+  border-radius: 0.3em;
+  padding: 0.3em 1em;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-20%);
+  transition: all 0.3s;
+}
+
+.show {
+  transform: translateY(0);
+  opacity: 1;
 }
 </style>

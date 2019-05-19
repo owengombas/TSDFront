@@ -14,4 +14,5 @@ export interface IFieldNode extends INode {
   Primary: boolean;
   Relation?: IRelation;
   StaticRelation?: IStaticRelation;
+  Errors: string[];
 }

@@ -104,6 +104,7 @@ export default class Home extends Vue {
 }
 
 .item {
+  min-width: 400px;
   cursor: pointer;
   display: flex;
   align-items: center;

@@ -138,6 +138,10 @@ export default class Home extends Vue {
     return arr;
   }
 
+  /**
+   * Get the relation type to an another field
+   * @deprecated
+   */
   private relationType(item: IFieldNode) {
     if (item.Relation) {
       if (item.IsArray && item.Relation.FieldNode.IsArray) {
@@ -256,6 +260,9 @@ export default class Home extends Vue {
     return remove;
   }
 
+  /**
+   * Add a field to the class and scroll to bottom
+   */
   private addField() {
     const primary = this.primaryIndex < 0 ? true : false;
     const field = {
@@ -309,6 +316,9 @@ export default class Home extends Vue {
     }
   }
 
+  /**
+   * Send the changes to the server and display a notification
+   */
   private async send() {
     if (this.selected) {
       this.loading = true;
@@ -356,6 +366,9 @@ export default class Home extends Vue {
     this.$router.replace("/");
   }
 
+  /**
+   * Display a notification on the top of the page
+   */
   private notify(text: string) {
     this.notif = text;
     this.showNotif = true;
@@ -369,6 +382,8 @@ export default class Home extends Vue {
 <style lang="scss" scoped>
 .field-settings {
   width: 60%;
+  max-width: 800px;
+  min-width: 650px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -392,7 +407,7 @@ export default class Home extends Vue {
   margin-top: 40px;
 }
 
-.fields {
+.fields { 
   margin-top: 20px;
   margin-bottom: 20px;
 }

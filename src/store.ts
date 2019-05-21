@@ -26,12 +26,17 @@ export default new Vuex.Store<IStore>({
     addClasses({ commit }, classes: IClassNode[]) {
       commit("addClasses", classes);
     },
+    /**
+     * Get the classes from the server
+     */
     async getClasses({ commit }) {
       const res = await fetch("http://localhost:4000/rest/cms/");
       const classes: IClassNode[] = await res.json();
+      // Set the received name to the current name
       classes.map((classNode) => {
         classNode.ReceivedName = classNode.Name;
       });
+      // Make relation to existing classes (not used)
       ClassUtils.makeRelations(classes);
       commit("addClasses", classes);
     }

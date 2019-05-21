@@ -18,7 +18,8 @@ input[type="text"] {
   color: rgb(80, 80, 80);
   border-radius: 0.2em;
   font-weight: bolder;
-  padding: 0.4em 0.5em;
+  padding: 0 0.5em;
+  height: 2em;
   outline: none;
 }
 
@@ -31,7 +32,9 @@ h2 {
 }
 
 select {
-  height: 49px;
+  border-radius: 0.2em;
+  height: 2em;
+  padding: 0 0.3em;
   outline: none;
   font-size: 1.7em;
   font-weight: bold;
